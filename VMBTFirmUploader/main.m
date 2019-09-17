@@ -15,6 +15,7 @@ bool lock = true;
 void printHelp();
 NSString *vmxFilePath;
 NSString *snapshotName;
+NSString *vmrunExec;
 
 @protocol DaemonProtocol
 - (void)performWork;
@@ -60,20 +61,20 @@ void uploadFirmware(NSString *vmPath, NSString *snapshot){
         return;
     lock = true;
     NSLog(@"Uploading firmware...");
-    [[NSString stringWithFormat:@"vmrun -T ws revertToSnapshot \"%@\" %@",vmPath,snapshot] runAsCommand];
-    [[NSString stringWithFormat:@"vmrun -T ws start \"%@\" nogui",vmPath] runAsCommand];
+    [[NSString stringWithFormat:@"%@ -T ws revertToSnapshot \"%@\" %@",vmrunExec,vmPath,snapshot] runAsCommand];
+    [[NSString stringWithFormat:@"%@ -T ws start \"%@\" nogui",vmrunExec,vmPath] runAsCommand];
     sleep(50); // make sure that vm have enough time to run.
     
 
     // force shutdown, make sure that no vm is running at background wasting resource
-    [[NSString stringWithFormat:@"vmrun -T ws stop \"%@\" hard",vmPath] runAsCommand];
+    [[NSString stringWithFormat:@"%@ -T ws stop \"%@\" hard",vmrunExec,vmPath] runAsCommand];
     lock = false;
     NSLog(@"Upload finished");
 
 }
 
 void printHelp(){
-    NSLog(@"Usage: VMBTFirmUploader <vmx path> <snapshot name>");
+    NSLog(@"Usage: VMBTFirmUploader <vmx path> <snapshot name> [vmrun path]");
 }
 
 # pragma mark VMBTFirmUploader Object Conforms to Protocol
@@ -196,17 +197,25 @@ void sigHandler(int signo)
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
         lock = true;
-        if([@"hash vmrun" runAsCommand].length!=0){
-            NSLog(@"`vmrun` not found, please install vmware-funsion and make sure that it is in $PATH");
-            return 1;
-        }
 
         if (argc <3){
             printHelp();
             return 128; // invalid arguments
         }
 
-        NSLog(@"VMBTFirmUploader v1.1");
+
+
+        NSLog(@"VMBTFirmUploader v1.3");
+
+        if (argc >= 4){
+            vmrunExec = [NSString stringWithCString:argv[3]];
+        }
+
+        if([[NSString stringWithFormat:@"hash %@",vmrunExec] runAsCommand].length!=0){
+            NSLog(@"`vmrun` not found, please install vmware-funsion and make sure that it is in $PATH");
+            printHelp();
+            return 1;
+        }
 
         vmxFilePath = [NSString stringWithCString:argv[1]];
         snapshotName = [NSString stringWithCString:argv[2]];
@@ -226,6 +235,7 @@ int main(int argc, const char * argv[]) {
         if ([filemgr fileExistsAtPath:vmxFilePath]){
             NSLog(@"Found vmx file");
         }else{
+            NSLog(@"%@ is missing!",vmxFilePath);
             NSLog(@"vmx file not found");
             return 128; // invalid arguments
         }
