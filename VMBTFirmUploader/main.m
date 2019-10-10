@@ -63,7 +63,7 @@ void uploadFirmware(NSString *vmPath, NSString *snapshot){
     NSLog(@"Uploading firmware...");
     [[NSString stringWithFormat:@"%@ -T ws revertToSnapshot \"%@\" %@",vmrunExec,vmPath,snapshot] runAsCommand];
     [[NSString stringWithFormat:@"%@ -T ws start \"%@\" nogui",vmrunExec,vmPath] runAsCommand];
-    sleep(50); // make sure that vm have enough time to run.
+    sleep(25); // make sure that vm have enough time to run.
     
 
     // force shutdown, make sure that no vm is running at background wasting resource
@@ -206,6 +206,7 @@ int main(int argc, const char * argv[]) {
 
 
         NSLog(@"VMBTFirmUploader v1.3");
+        vmrunExec = @"vmrun";
 
         if (argc >= 4){
             vmrunExec = [NSString stringWithCString:argv[3]];
@@ -254,7 +255,8 @@ int main(int argc, const char * argv[]) {
             return 128; // invalid arguments
         }
 
-        sleep(11);
+
+        sleep(2);
         lock = false;
 
         do{
