@@ -11,7 +11,8 @@
 
 bool haveFirmware();
 void uploadFirmware(NSString *vmPath,NSString *snapshot);
-bool lock = true;
+
+static bool lock = true;
 void printHelp();
 NSString *vmxFilePath;
 NSString *snapshotName;
@@ -44,33 +45,33 @@ NSString *vmrunExec;
 @end
 
 bool haveFirmware(){
-    NSString *output = [@"system_profiler SPBluetoothDataType | grep Firmware | tr -s ' '" runAsCommand];
+    NSString *output = [@"system_profiler SPBluetoothDataType 2>/dev/null | grep Firmware | awk -F\"[()]\" '{print $2}' | tr -d \'\\n\'" runAsCommand];
 
-    // system_profiler will print an info directly to stdout when bt is paired, so we need double command
 
-    NSString *version = [[NSString stringWithFormat:@"echo \"%@\" | awk -F\"[()]\" '{print $2}' | tr -d \'\\n\'",output] runAsCommand];
-    NSLog(@"Bluetooth firmware version: %@",version);
-    if ([version isEqualToString:@"0.0"]){
+    NSLog(@"Bluetooth firmware version: %@", output);
+    if ([output isEqualToString:@"0.0"]) {
         return false;
     }
     return true;
 }
 
 void uploadFirmware(NSString *vmPath, NSString *snapshot){
+//    sleep(1);
     if (lock || haveFirmware())
         return;
     lock = true;
     NSLog(@"Uploading firmware...");
     [[NSString stringWithFormat:@"%@ -T ws revertToSnapshot \"%@\" %@",vmrunExec,vmPath,snapshot] runAsCommand];
     [[NSString stringWithFormat:@"%@ -T ws start \"%@\" nogui",vmrunExec,vmPath] runAsCommand];
-    sleep(25); // make sure that vm have enough time to run.
-    
+    sleep(50); // make sure that vm have enough time to run.
 
     // force shutdown, make sure that no vm is running at background wasting resource
     [[NSString stringWithFormat:@"%@ -T ws stop \"%@\" hard",vmrunExec,vmPath] runAsCommand];
-    lock = false;
-    NSLog(@"Upload finished");
 
+    lock = false;
+    haveFirmware();
+
+    NSLog(@"Upload finished");
 }
 
 void printHelp(){
@@ -112,7 +113,6 @@ void printHelp(){
         [[[NSWorkspace sharedWorkspace] notificationCenter] addObserver: self
                                                                selector: @selector(receiveWakeNote:)
                                                                    name: NSWorkspaceSessionDidBecomeActiveNotification object: nil];
-
     }
     return self;
 }
@@ -122,8 +122,6 @@ void printHelp(){
 {
     // Do here what needs to be done to shut things down
 //    [super dealloc];
-
-
 
     // sleep wake
     [[[NSWorkspace sharedWorkspace] notificationCenter] removeObserver: self
@@ -156,7 +154,9 @@ void printHelp(){
 {
     NSLog(@"receiveSleepNote: %@", [note name]);
     NSLog(@"Wake detected, trying to upload firmware");
-    uploadFirmware(vmxFilePath, snapshotName);
+    if (!lock) {
+        uploadFirmware(vmxFilePath, snapshotName);
+    }
 }
 
 
@@ -198,14 +198,18 @@ int main(int argc, const char * argv[]) {
     @autoreleasepool {
         lock = true;
 
+        if (argc == 2 && [@"help" caseInsensitiveCompare:[NSString stringWithCString:argv[1]]] == NSOrderedSame) {
+            printHelp();
+            return 0;
+        }
+
         if (argc <3){
             printHelp();
             return 128; // invalid arguments
         }
 
 
-
-        NSLog(@"VMBTFirmUploader v1.3");
+        NSLog(@"VMBTFirmUploader v1.6");
         vmrunExec = @"vmrun";
 
         if (argc >= 4){
@@ -213,7 +217,8 @@ int main(int argc, const char * argv[]) {
         }
 
         if([[NSString stringWithFormat:@"hash %@",vmrunExec] runAsCommand].length!=0){
-            NSLog(@"`vmrun` not found, please install vmware-funsion and make sure that it is in $PATH");
+            NSLog(@"`vmrun` not found, please install vmware-funsion and make sure that it is in $PATH.");
+            NSLog(@"or pass vmrun binary as parameter, see help with `VMBTFirmUploader help`");
             printHelp();
             return 1;
         }
@@ -256,7 +261,6 @@ int main(int argc, const char * argv[]) {
         }
 
 
-        sleep(2);
         lock = false;
 
         do{
